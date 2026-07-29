@@ -337,7 +337,7 @@ export function CandidatesClient() {
                 onClick={() => setSelectedId(c.id)}
                 className="mt-2 rounded bg-foreground text-background px-3 py-1.5 text-sm font-medium"
               >
-                View Resume
+                View Details
               </button>
             </div>
           ))}

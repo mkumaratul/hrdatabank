@@ -62,11 +62,11 @@ export function CandidateModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-5xl flex-col rounded-lg bg-white dark:bg-zinc-900 shadow-xl md:flex-row"
-        style={{ height: "90vh" }}
+        className="flex w-full max-w-[1600px] flex-col rounded-lg bg-white dark:bg-zinc-900 shadow-xl md:flex-row"
+        style={{ height: "94vh", width: "95vw" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col border-b md:border-b-0 md:border-r border-black/10 dark:border-white/15 md:w-1/2">
+        <div className="flex flex-col border-b md:border-b-0 md:border-r border-black/10 dark:border-white/15 md:w-[62%]">
           <div className="flex items-center justify-between border-b border-black/10 dark:border-white/15 px-4 py-3">
             <span className="truncate font-medium text-sm">{c.fileName}</span>
             <div className="flex items-center gap-2">
@@ -86,12 +86,13 @@ export function CandidateModal({
               </a>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden min-h-[300px]">
+          <div className="flex-1 overflow-hidden min-h-[500px]">
             {isPdf ? (
               <iframe
                 ref={iframeRef}
                 src={previewUrl}
                 className="h-full w-full"
+                style={{ minHeight: "500px" }}
                 title={c.fileName}
               />
             ) : (
@@ -108,7 +109,7 @@ export function CandidateModal({
           </div>
         </div>
 
-        <div className="flex flex-col md:w-1/2 overflow-hidden">
+        <div className="flex flex-col md:w-[38%] overflow-hidden">
           <div className="flex items-center justify-between border-b border-black/10 dark:border-white/15 px-4 py-3">
             <h2 className="text-lg font-semibold truncate">{c.name ?? "Candidate"}</h2>
             <button
