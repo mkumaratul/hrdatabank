@@ -1,0 +1,49 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CandidateStatus {
+  PENDING
+  SELECTED
+  REJECTED
+  WAITLIST
+}
+
+model HrUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  reviewedCandidates Candidate[]
+}
+
+model Candidate {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?
+  phone         String?
+  skillCategory String?
+  status        CandidateStatus @default(PENDING)
+  statusReason  String?
+
+  fileName String
+  mimeType String
+  fileData Bytes
+  rawText  String?
+
+  reviewedById String?
+  reviewedBy   HrUser? @relation(fields: [reviewedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
