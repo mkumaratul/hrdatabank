@@ -1,8 +1,16 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { ResumeModal } from "./ResumeModal";
 
-type Status = "PENDING" | "SELECTED" | "REJECTED" | "WAITLIST";
+type Status =
+  | "PENDING"
+  | "SELECTED"
+  | "REJECTED"
+  | "WAITLIST"
+  | "INTERVIEW_TO_BE_SCHEDULED"
+  | "INTERVIEW_SCHEDULED"
+  | "INTERVIEW_CANCELLED";
 
 interface Candidate {
   id: string;
@@ -13,17 +21,41 @@ interface Candidate {
   status: Status;
   statusReason: string | null;
   fileName: string;
+  mimeType: string;
   createdAt: string;
   reviewedBy: { name: string } | null;
 }
 
-const STATUS_OPTIONS: Status[] = ["PENDING", "SELECTED", "REJECTED", "WAITLIST"];
+const STATUS_OPTIONS: Status[] = [
+  "PENDING",
+  "SELECTED",
+  "REJECTED",
+  "WAITLIST",
+  "INTERVIEW_TO_BE_SCHEDULED",
+  "INTERVIEW_SCHEDULED",
+  "INTERVIEW_CANCELLED",
+];
+const STATUSES_REQUIRING_REASON = new Set<Status>(["REJECTED", "WAITLIST", "INTERVIEW_CANCELLED"]);
+const ADD_NEW_CATEGORY = "__ADD_NEW__";
+
+const STATUS_LABELS: Record<Status, string> = {
+  PENDING: "Pending",
+  SELECTED: "Selected",
+  REJECTED: "Rejected",
+  WAITLIST: "Waitlist",
+  INTERVIEW_TO_BE_SCHEDULED: "Interview to be scheduled",
+  INTERVIEW_SCHEDULED: "Interview scheduled",
+  INTERVIEW_CANCELLED: "Interview cancelled",
+};
 
 const STATUS_STYLES: Record<Status, string> = {
   PENDING: "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100",
   SELECTED: "bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100",
   REJECTED: "bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100",
   WAITLIST: "bg-yellow-200 text-yellow-900 dark:bg-yellow-800 dark:text-yellow-100",
+  INTERVIEW_TO_BE_SCHEDULED: "bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100",
+  INTERVIEW_SCHEDULED: "bg-indigo-200 text-indigo-900 dark:bg-indigo-800 dark:text-indigo-100",
+  INTERVIEW_CANCELLED: "bg-orange-200 text-orange-900 dark:bg-orange-800 dark:text-orange-100",
 };
 
 export function CandidatesClient() {
@@ -33,7 +65,10 @@ export function CandidatesClient() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Status | "ALL">("ALL");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [search, setSearch] = useState("");
   const [pendingReason, setPendingReason] = useState<Record<string, string>>({});
+  const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadCandidates = useCallback(async () => {
@@ -46,22 +81,32 @@ export function CandidatesClient() {
     setLoading(false);
   }, []);
 
+  const loadCategories = useCallback(async () => {
+    const res = await fetch("/api/skill-categories");
+    if (res.ok) {
+      const data = await res.json();
+      setCategories(data.categories);
+    }
+  }, []);
+
   useEffect(() => {
     loadCandidates();
-  }, [loadCandidates]);
-
-  const categories = useMemo(() => {
-    const set = new Set(candidates.map((c) => c.skillCategory).filter(Boolean) as string[]);
-    return Array.from(set).sort();
-  }, [candidates]);
+    loadCategories();
+  }, [loadCandidates, loadCategories]);
 
   const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
     return candidates.filter((c) => {
       if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
       if (categoryFilter !== "ALL" && c.skillCategory !== categoryFilter) return false;
+      if (query) {
+        const haystack = `${c.name ?? ""} ${c.email ?? ""} ${c.phone ?? ""}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
       return true;
     });
-  }, [candidates, statusFilter, categoryFilter]);
+  }, [candidates, statusFilter, categoryFilter, search]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -111,6 +156,50 @@ export function CandidatesClient() {
     );
   }
 
+  async function updateCategory(id: string, rawCategory: string) {
+    let category = rawCategory;
+
+    if (rawCategory === ADD_NEW_CATEGORY) {
+      const input = window.prompt("New category name:");
+      if (!input?.trim()) return;
+      category = input.trim();
+    }
+
+    const res = await fetch(`/api/candidates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skillCategory: category }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error ?? "Failed to update category");
+      return;
+    }
+
+    const savedCategory: string = data.candidate.skillCategory;
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, skillCategory: savedCategory } : c)),
+    );
+    setCategories((prev) =>
+      prev.some((c) => c.toLowerCase() === savedCategory.toLowerCase())
+        ? prev
+        : [...prev, savedCategory].sort((a, b) => a.localeCompare(b)),
+    );
+  }
+
+  async function deleteCandidate(id: string, name: string | null) {
+    if (!confirm(`Delete ${name ?? "this candidate"}? This can't be undone.`)) return;
+
+    const res = await fetch(`/api/candidates/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert("Failed to delete candidate");
+      return;
+    }
+
+    setCandidates((prev) => prev.filter((c) => c.id !== id));
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto w-full">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -142,6 +231,14 @@ export function CandidatesClient() {
       {uploadError && <p className="text-sm text-red-500">{uploadError}</p>}
 
       <div className="flex flex-wrap gap-3">
+        <input
+          type="text"
+          placeholder="Search by name, email or phone…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="min-w-[240px] flex-1 rounded border border-black/15 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm"
+        />
+
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as Status | "ALL")}
@@ -150,7 +247,7 @@ export function CandidatesClient() {
           <option value="ALL">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {STATUS_LABELS[s]}
             </option>
           ))}
         </select>
@@ -186,11 +283,12 @@ export function CandidatesClient() {
                 <th className="p-3">Reason</th>
                 <th className="p-3">Reviewed by</th>
                 <th className="p-3">Resume</th>
+                <th className="p-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((c) => {
-                const reasonRequired = c.status === "REJECTED" || c.status === "WAITLIST";
+                const reasonRequired = STATUSES_REQUIRING_REASON.has(c.status);
                 const reasonValue = pendingReason[c.id] ?? c.statusReason ?? "";
 
                 return (
@@ -198,17 +296,28 @@ export function CandidatesClient() {
                     <td className="p-3">{c.name ?? "—"}</td>
                     <td className="p-3">{c.email ?? "—"}</td>
                     <td className="p-3">{c.phone ?? "—"}</td>
-                    <td className="p-3">{c.skillCategory ?? "—"}</td>
+                    <td className="p-3">
+                      <select
+                        value={c.skillCategory ?? ""}
+                        onChange={(e) => updateCategory(c.id, e.target.value)}
+                        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
+                      >
+                        {!c.skillCategory && <option value="">—</option>}
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                        <option value={ADD_NEW_CATEGORY}>+ Add new…</option>
+                      </select>
+                    </td>
                     <td className="p-3">
                       <select
                         value={c.status}
                         onChange={(e) => {
                           const nextStatus = e.target.value as Status;
                           const reason = pendingReason[c.id] ?? c.statusReason ?? "";
-                          if (
-                            (nextStatus === "REJECTED" || nextStatus === "WAITLIST") &&
-                            !reason.trim()
-                          ) {
+                          if (STATUSES_REQUIRING_REASON.has(nextStatus) && !reason.trim()) {
                             setCandidates((prev) =>
                               prev.map((x) => (x.id === c.id ? { ...x, status: nextStatus } : x)),
                             );
@@ -220,7 +329,7 @@ export function CandidatesClient() {
                       >
                         {STATUS_OPTIONS.map((s) => (
                           <option key={s} value={s}>
-                            {s}
+                            {STATUS_LABELS[s]}
                           </option>
                         ))}
                       </select>
@@ -245,13 +354,45 @@ export function CandidatesClient() {
                       </div>
                     </td>
                     <td className="p-3">{c.reviewedBy?.name ?? "—"}</td>
-                    <td className="p-3">{c.fileName}</td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => setPreviewCandidate(c)}
+                        className="underline text-left"
+                      >
+                        {c.fileName}
+                      </button>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setPreviewCandidate(c)}
+                          className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => deleteCandidate(c.id, c.name)}
+                          className="rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 px-2 py-1 text-xs"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {previewCandidate && (
+        <ResumeModal
+          candidateId={previewCandidate.id}
+          fileName={previewCandidate.fileName}
+          mimeType={previewCandidate.mimeType}
+          onClose={() => setPreviewCandidate(null)}
+        />
       )}
     </div>
   );

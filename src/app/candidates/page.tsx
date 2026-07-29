@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { CandidatesClient } from "./CandidatesClient";
 
@@ -9,6 +10,9 @@ export default async function CandidatesPage() {
       <header className="flex items-center justify-between border-b border-black/10 dark:border-white/15 px-6 py-4">
         <span className="font-semibold">HR Databank</span>
         <div className="flex items-center gap-4 text-sm">
+          <Link href="/hr-users" className="underline">
+            Manage HR
+          </Link>
           <span className="opacity-70">{session?.user?.name}</span>
           <form
             action={async () => {

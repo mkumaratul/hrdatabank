@@ -11,6 +11,16 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+function normalizeEmail(email: string | null): string | null {
+  const trimmed = email?.trim().toLowerCase();
+  return trimmed ? trimmed : null;
+}
+
+function normalizePhone(phone: string | null): string | null {
+  const digits = phone?.replace(/\D/g, "");
+  return digits ? digits : null;
+}
+
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
@@ -28,6 +38,7 @@ export async function GET() {
       status: true,
       statusReason: true,
       fileName: true,
+      mimeType: true,
       createdAt: true,
       reviewedBy: { select: { name: true } },
     },
@@ -49,6 +60,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
   }
 
+  const existing = await prisma.candidate.findMany({ select: { email: true, phone: true } });
+  const seenEmails = new Set(
+    existing.map((c) => normalizeEmail(c.email)).filter((v): v is string => v !== null),
+  );
+  const seenPhones = new Set(
+    existing.map((c) => normalizePhone(c.phone)).filter((v): v is string => v !== null),
+  );
+
   const created = [];
   const skipped = [];
 
@@ -64,6 +83,17 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const parsed = await parseResume(buffer, file.type, file.name);
+
+    const normEmail = normalizeEmail(parsed.email);
+    const normPhone = normalizePhone(parsed.phone);
+
+    if ((normEmail && seenEmails.has(normEmail)) || (normPhone && seenPhones.has(normPhone))) {
+      skipped.push({
+        fileName: file.name,
+        reason: "Duplicate candidate (matching email or phone already exists)",
+      });
+      continue;
+    }
 
     const candidate = await prisma.candidate.create({
       data: {
@@ -89,6 +119,8 @@ export async function POST(req: NextRequest) {
     });
 
     created.push(candidate);
+    if (normEmail) seenEmails.add(normEmail);
+    if (normPhone) seenPhones.add(normPhone);
   }
 
   return NextResponse.json({ created, skipped });
