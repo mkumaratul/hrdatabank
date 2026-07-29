@@ -1,62 +1,16 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { ResumeModal } from "./ResumeModal";
-
-type Status =
-  | "PENDING"
-  | "SELECTED"
-  | "REJECTED"
-  | "WAITLIST"
-  | "INTERVIEW_TO_BE_SCHEDULED"
-  | "INTERVIEW_SCHEDULED"
-  | "INTERVIEW_CANCELLED";
-
-interface Candidate {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  skillCategory: string | null;
-  status: Status;
-  statusReason: string | null;
-  fileName: string;
-  mimeType: string;
-  createdAt: string;
-  reviewedBy: { name: string } | null;
-}
-
-const STATUS_OPTIONS: Status[] = [
-  "PENDING",
-  "SELECTED",
-  "REJECTED",
-  "WAITLIST",
-  "INTERVIEW_TO_BE_SCHEDULED",
-  "INTERVIEW_SCHEDULED",
-  "INTERVIEW_CANCELLED",
-];
-const STATUSES_REQUIRING_REASON = new Set<Status>(["REJECTED", "WAITLIST", "INTERVIEW_CANCELLED"]);
-const ADD_NEW_CATEGORY = "__ADD_NEW__";
-
-const STATUS_LABELS: Record<Status, string> = {
-  PENDING: "Pending",
-  SELECTED: "Selected",
-  REJECTED: "Rejected",
-  WAITLIST: "Waitlist",
-  INTERVIEW_TO_BE_SCHEDULED: "Interview to be scheduled",
-  INTERVIEW_SCHEDULED: "Interview scheduled",
-  INTERVIEW_CANCELLED: "Interview cancelled",
-};
-
-const STATUS_STYLES: Record<Status, string> = {
-  PENDING: "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100",
-  SELECTED: "bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100",
-  REJECTED: "bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100",
-  WAITLIST: "bg-yellow-200 text-yellow-900 dark:bg-yellow-800 dark:text-yellow-100",
-  INTERVIEW_TO_BE_SCHEDULED: "bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100",
-  INTERVIEW_SCHEDULED: "bg-indigo-200 text-indigo-900 dark:bg-indigo-800 dark:text-indigo-100",
-  INTERVIEW_CANCELLED: "bg-orange-200 text-orange-900 dark:bg-orange-800 dark:text-orange-100",
-};
+import { CandidateModal } from "./CandidateModal";
+import {
+  Candidate,
+  Status,
+  TextField,
+  STATUS_OPTIONS,
+  STATUS_LABELS,
+  STATUS_STYLES,
+  ADD_NEW_CATEGORY,
+} from "./types";
 
 export function CandidatesClient() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -65,10 +19,11 @@ export function CandidatesClient() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Status | "ALL">("ALL");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [uploadedByFilter, setUploadedByFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
-  const [pendingReason, setPendingReason] = useState<Record<string, string>>({});
-  const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  const [hrUsers, setHrUsers] = useState<{ id: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadCandidates = useCallback(async () => {
@@ -89,10 +44,19 @@ export function CandidatesClient() {
     }
   }, []);
 
+  const loadHrUsers = useCallback(async () => {
+    const res = await fetch("/api/hr-users");
+    if (res.ok) {
+      const data = await res.json();
+      setHrUsers(data.hrUsers);
+    }
+  }, []);
+
   useEffect(() => {
     loadCandidates();
     loadCategories();
-  }, [loadCandidates, loadCategories]);
+    loadHrUsers();
+  }, [loadCandidates, loadCategories, loadHrUsers]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -100,13 +64,16 @@ export function CandidatesClient() {
     return candidates.filter((c) => {
       if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
       if (categoryFilter !== "ALL" && c.skillCategory !== categoryFilter) return false;
+      if (uploadedByFilter !== "ALL" && c.uploadedBy?.id !== uploadedByFilter) return false;
       if (query) {
         const haystack = `${c.name ?? ""} ${c.email ?? ""} ${c.phone ?? ""}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
     });
-  }, [candidates, statusFilter, categoryFilter, search]);
+  }, [candidates, statusFilter, categoryFilter, uploadedByFilter, search]);
+
+  const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -150,7 +117,12 @@ export function CandidatesClient() {
     setCandidates((prev) =>
       prev.map((c) =>
         c.id === id
-          ? { ...c, status: data.candidate.status, statusReason: data.candidate.statusReason, reviewedBy: data.candidate.reviewedBy }
+          ? {
+              ...c,
+              status: data.candidate.status,
+              statusReason: data.candidate.statusReason,
+              reviewedBy: data.candidate.reviewedBy,
+            }
           : c,
       ),
     );
@@ -188,16 +160,71 @@ export function CandidatesClient() {
     );
   }
 
-  async function deleteCandidate(id: string, name: string | null) {
-    if (!confirm(`Delete ${name ?? "this candidate"}? This can't be undone.`)) return;
+  async function updateTextField(id: string, field: TextField, value: string) {
+    const res = await fetch(`/api/candidates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error ?? "Failed to update");
+      return;
+    }
+
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: data.candidate[field] } : c)),
+    );
+  }
+
+  async function updateWorkLinks(id: string, links: string[]) {
+    const res = await fetch(`/api/candidates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workLinks: links }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error ?? "Failed to update links");
+      return;
+    }
+
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, workLinks: data.candidate.workLinks } : c)),
+    );
+  }
+
+  async function addRemark(id: string, text: string) {
+    const res = await fetch(`/api/candidates/${id}/remarks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error ?? "Failed to add remark");
+      return;
+    }
+
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, remarks: [data.remark, ...c.remarks] } : c)),
+    );
+  }
+
+  async function deleteCandidate(id: string, name: string | null): Promise<boolean> {
+    if (!confirm(`Delete ${name ?? "this candidate"}? This can't be undone.`)) return false;
 
     const res = await fetch(`/api/candidates/${id}`, { method: "DELETE" });
     if (!res.ok) {
       alert("Failed to delete candidate");
-      return;
+      return false;
     }
 
     setCandidates((prev) => prev.filter((c) => c.id !== id));
+    return true;
   }
 
   return (
@@ -264,6 +291,19 @@ export function CandidatesClient() {
             </option>
           ))}
         </select>
+
+        <select
+          value={uploadedByFilter}
+          onChange={(e) => setUploadedByFilter(e.target.value)}
+          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm"
+        >
+          <option value="ALL">Uploaded by: anyone</option>
+          {hrUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
@@ -271,127 +311,50 @@ export function CandidatesClient() {
       ) : filtered.length === 0 ? (
         <p className="text-sm opacity-70">No candidates yet. Upload a resume to get started.</p>
       ) : (
-        <div className="overflow-x-auto rounded border border-black/10 dark:border-white/15">
-          <table className="w-full text-sm">
-            <thead className="bg-black/5 dark:bg-white/5 text-left">
-              <tr>
-                <th className="p-3">Name</th>
-                <th className="p-3">Email</th>
-                <th className="p-3">Phone</th>
-                <th className="p-3">Category</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Reason</th>
-                <th className="p-3">Reviewed by</th>
-                <th className="p-3">Resume</th>
-                <th className="p-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => {
-                const reasonRequired = STATUSES_REQUIRING_REASON.has(c.status);
-                const reasonValue = pendingReason[c.id] ?? c.statusReason ?? "";
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((c) => (
+            <div
+              key={c.id}
+              className="flex flex-col gap-2 rounded-lg border border-black/10 dark:border-white/15 p-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-medium truncate">{c.name ?? "Unnamed candidate"}</h3>
+                <span
+                  className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[c.status]}`}
+                >
+                  {STATUS_LABELS[c.status]}
+                </span>
+              </div>
 
-                return (
-                  <tr key={c.id} className="border-t border-black/10 dark:border-white/10 align-top">
-                    <td className="p-3">{c.name ?? "—"}</td>
-                    <td className="p-3">{c.email ?? "—"}</td>
-                    <td className="p-3">{c.phone ?? "—"}</td>
-                    <td className="p-3">
-                      <select
-                        value={c.skillCategory ?? ""}
-                        onChange={(e) => updateCategory(c.id, e.target.value)}
-                        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
-                      >
-                        {!c.skillCategory && <option value="">—</option>}
-                        {categories.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                        <option value={ADD_NEW_CATEGORY}>+ Add new…</option>
-                      </select>
-                    </td>
-                    <td className="p-3">
-                      <select
-                        value={c.status}
-                        onChange={(e) => {
-                          const nextStatus = e.target.value as Status;
-                          const reason = pendingReason[c.id] ?? c.statusReason ?? "";
-                          if (STATUSES_REQUIRING_REASON.has(nextStatus) && !reason.trim()) {
-                            setCandidates((prev) =>
-                              prev.map((x) => (x.id === c.id ? { ...x, status: nextStatus } : x)),
-                            );
-                            return;
-                          }
-                          updateStatus(c.id, nextStatus, reason);
-                        }}
-                        className={`rounded px-2 py-1 text-xs font-medium ${STATUS_STYLES[c.status]}`}
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
-                            {STATUS_LABELS[s]}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-3 min-w-[220px]">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder={reasonRequired ? "Reason (required)" : "Reason (optional)"}
-                          value={reasonValue}
-                          onChange={(e) =>
-                            setPendingReason((prev) => ({ ...prev, [c.id]: e.target.value }))
-                          }
-                          className="w-full rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
-                        />
-                        <button
-                          onClick={() => updateStatus(c.id, c.status, reasonValue)}
-                          className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </td>
-                    <td className="p-3">{c.reviewedBy?.name ?? "—"}</td>
-                    <td className="p-3">
-                      <button
-                        onClick={() => setPreviewCandidate(c)}
-                        className="underline text-left"
-                      >
-                        {c.fileName}
-                      </button>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setPreviewCandidate(c)}
-                          className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => deleteCandidate(c.id, c.name)}
-                          className="rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 px-2 py-1 text-xs"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              <p className="text-sm truncate">{c.email ?? "—"}</p>
+              <p className="text-sm">{c.phone ?? "—"}</p>
+              <p className="text-sm opacity-70">{c.skillCategory ?? "Uncategorized"}</p>
+              {c.uploadedBy && (
+                <p className="text-xs opacity-50">Uploaded by {c.uploadedBy.name}</p>
+              )}
+
+              <button
+                onClick={() => setSelectedId(c.id)}
+                className="mt-2 rounded bg-foreground text-background px-3 py-1.5 text-sm font-medium"
+              >
+                View Resume
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
-      {previewCandidate && (
-        <ResumeModal
-          candidateId={previewCandidate.id}
-          fileName={previewCandidate.fileName}
-          mimeType={previewCandidate.mimeType}
-          onClose={() => setPreviewCandidate(null)}
+      {selectedCandidate && (
+        <CandidateModal
+          candidate={selectedCandidate}
+          categories={categories}
+          onClose={() => setSelectedId(null)}
+          onUpdateStatus={updateStatus}
+          onUpdateCategory={updateCategory}
+          onUpdateTextField={updateTextField}
+          onUpdateWorkLinks={updateWorkLinks}
+          onAddRemark={addRemark}
+          onDelete={deleteCandidate}
         />
       )}
     </div>

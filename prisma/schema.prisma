@@ -27,7 +27,8 @@ model HrUser {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  reviewedCandidates Candidate[]
+  reviewedCandidates Candidate[] @relation("ReviewedCandidates")
+  uploadedCandidates Candidate[] @relation("UploadedCandidates")
 }
 
 model Candidate {
@@ -39,14 +40,34 @@ model Candidate {
   status        CandidateStatus @default(PENDING)
   statusReason  String?
 
+  experience   String?
+  currentCtc   String?
+  expectedCtc  String?
+  noticePeriod String?
+  location     String?
+  workLinks    String[] @default([])
+
   fileName String
   mimeType String
   fileData Bytes
   rawText  String?
 
   reviewedById String?
-  reviewedBy   HrUser? @relation(fields: [reviewedById], references: [id])
+  reviewedBy   HrUser? @relation("ReviewedCandidates", fields: [reviewedById], references: [id])
+
+  uploadedById String?
+  uploadedBy   HrUser? @relation("UploadedCandidates", fields: [uploadedById], references: [id])
+
+  remarks Remark[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Remark {
+  id          String   @id @default(cuid())
+  text        String
+  createdAt   DateTime @default(now())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 }

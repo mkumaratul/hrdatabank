@@ -44,7 +44,17 @@ export const SKILL_CATEGORIES: Record<string, string[]> = {
 };
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-const PHONE_REGEX = /(\+?\d{1,3}[\s.-]?)?(\(?\d{3,5}\)?[\s.-]?)\d{3,4}[\s.-]?\d{3,4}/;
+const PHONE_REGEX = /(?:\+?\d{1,3}[\s.-]?)?(?:\d[\s.-]?){9,12}\d/;
+
+const EXPERIENCE_REGEX =
+  /(\d+(?:\.\d+)?)\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:relevant\s*)?experience/i;
+const CURRENT_CTC_REGEX =
+  /current\s*ctc\s*[:\-]?\s*([\w.,]+(?:\s*(?:lpa|lakhs?|k|per\s*annum|pa))?)/i;
+const EXPECTED_CTC_REGEX =
+  /expected\s*ctc\s*[:\-]?\s*([\w.,]+(?:\s*(?:lpa|lakhs?|k|per\s*annum|pa))?)/i;
+const NOTICE_PERIOD_REGEX = /notice\s*period\s*[:\-]?\s*([^\n,;]+)/i;
+const LOCATION_REGEX = /(?:current\s*)?location\s*[:\-]?\s*([^\n,;]+)/i;
+const URL_REGEX = /(https?:\/\/[^\s,;)]+|(?:www\.)?linkedin\.com\/[^\s,;)]+|(?:www\.)?github\.com\/[^\s,;)]+)/gi;
 
 export interface ParsedResume {
   rawText: string;
@@ -52,6 +62,12 @@ export interface ParsedResume {
   email: string | null;
   phone: string | null;
   skillCategory: string;
+  experience: string | null;
+  currentCtc: string | null;
+  expectedCtc: string | null;
+  noticePeriod: string | null;
+  location: string | null;
+  workLinks: string[];
 }
 
 export async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
@@ -110,6 +126,12 @@ function guessSkillCategory(text: string): string {
   return bestCategory;
 }
 
+function extractWorkLinks(text: string): string[] {
+  const matches = text.match(URL_REGEX) ?? [];
+  const normalized = matches.map((m) => m.replace(/[.,;]+$/, ""));
+  return Array.from(new Set(normalized));
+}
+
 export async function parseResume(
   buffer: Buffer,
   mimeType: string,
@@ -119,6 +141,11 @@ export async function parseResume(
 
   const emailMatch = rawText.match(EMAIL_REGEX);
   const phoneMatch = rawText.match(PHONE_REGEX);
+  const experienceMatch = rawText.match(EXPERIENCE_REGEX);
+  const currentCtcMatch = rawText.match(CURRENT_CTC_REGEX);
+  const expectedCtcMatch = rawText.match(EXPECTED_CTC_REGEX);
+  const noticePeriodMatch = rawText.match(NOTICE_PERIOD_REGEX);
+  const locationMatch = rawText.match(LOCATION_REGEX);
 
   return {
     rawText,
@@ -126,5 +153,11 @@ export async function parseResume(
     email: emailMatch ? emailMatch[0] : null,
     phone: phoneMatch ? phoneMatch[0].trim() : null,
     skillCategory: guessSkillCategory(rawText),
+    experience: experienceMatch ? `${experienceMatch[1]} years` : null,
+    currentCtc: currentCtcMatch ? currentCtcMatch[1].trim() : null,
+    expectedCtc: expectedCtcMatch ? expectedCtcMatch[1].trim() : null,
+    noticePeriod: noticePeriodMatch ? noticePeriodMatch[1].trim() : null,
+    location: locationMatch ? locationMatch[1].trim() : null,
+    workLinks: extractWorkLinks(rawText),
   };
 }
