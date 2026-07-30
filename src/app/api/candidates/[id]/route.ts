@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CandidateStatus, Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { resolveCategory } from "@/lib/skillCategories";
-
-const VALID_STATUSES = new Set(Object.values(CandidateStatus));
-const STATUSES_REQUIRING_REASON = new Set<CandidateStatus>([
-  "REJECTED",
-  "WAITLIST",
-  "INTERVIEW_CANCELLED",
-]);
+import { resolveStatus, STATUSES_REQUIRING_REASON } from "@/lib/candidateStatuses";
 
 const TEXT_FIELDS = [
+  "name",
+  "email",
+  "phone",
   "experience",
   "currentCtc",
   "expectedCtc",
@@ -41,18 +38,21 @@ export async function PATCH(
   const data: Prisma.CandidateUpdateInput = {};
 
   if (status !== undefined) {
-    if (!VALID_STATUSES.has(status as CandidateStatus)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    const trimmedStatus = status.trim();
+    if (!trimmedStatus) {
+      return NextResponse.json({ error: "Status cannot be empty" }, { status: 400 });
     }
 
-    if (STATUSES_REQUIRING_REASON.has(status as CandidateStatus) && !statusReason?.trim()) {
+    const resolvedStatus = await resolveStatus(trimmedStatus);
+
+    if (STATUSES_REQUIRING_REASON.has(resolvedStatus) && !statusReason?.trim()) {
       return NextResponse.json(
         { error: "A reason is required for this status" },
         { status: 400 },
       );
     }
 
-    data.status = status as CandidateStatus;
+    data.status = resolvedStatus;
     data.statusReason = statusReason?.trim() || null;
     data.reviewedBy = { connect: { id: session.user.id } };
   }
@@ -85,6 +85,9 @@ export async function PATCH(
     data,
     select: {
       id: true,
+      name: true,
+      email: true,
+      phone: true,
       status: true,
       statusReason: true,
       skillCategory: true,
@@ -94,6 +97,7 @@ export async function PATCH(
       noticePeriod: true,
       location: true,
       workLinks: true,
+      updatedAt: true,
       reviewedBy: { select: { name: true } },
     },
   });

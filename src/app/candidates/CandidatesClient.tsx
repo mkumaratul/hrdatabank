@@ -6,10 +6,11 @@ import {
   Candidate,
   Status,
   TextField,
-  STATUS_OPTIONS,
-  STATUS_LABELS,
-  STATUS_STYLES,
   ADD_NEW_CATEGORY,
+  ADD_NEW_STATUS,
+  BUILT_IN_STATUSES,
+  statusLabel,
+  statusStyle,
 } from "./types";
 
 export function CandidatesClient() {
@@ -20,9 +21,12 @@ export function CandidatesClient() {
   const [statusFilter, setStatusFilter] = useState<Status | "ALL">("ALL");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [uploadedByFilter, setUploadedByFilter] = useState<string>("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>(BUILT_IN_STATUSES);
   const [hrUsers, setHrUsers] = useState<{ id: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,6 +48,14 @@ export function CandidatesClient() {
     }
   }, []);
 
+  const loadStatuses = useCallback(async () => {
+    const res = await fetch("/api/candidate-statuses");
+    if (res.ok) {
+      const data = await res.json();
+      setStatuses(data.statuses);
+    }
+  }, []);
+
   const loadHrUsers = useCallback(async () => {
     const res = await fetch("/api/hr-users");
     if (res.ok) {
@@ -55,23 +67,38 @@ export function CandidatesClient() {
   useEffect(() => {
     loadCandidates();
     loadCategories();
+    loadStatuses();
     loadHrUsers();
-  }, [loadCandidates, loadCategories, loadHrUsers]);
+  }, [loadCandidates, loadCategories, loadStatuses, loadHrUsers]);
+
+  function localDateStr(iso: string): string {
+    const d = new Date(iso);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const from = dateFrom || dateTo || null;
+    const to = dateTo || dateFrom || null;
 
     return candidates.filter((c) => {
       if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
       if (categoryFilter !== "ALL" && c.skillCategory !== categoryFilter) return false;
       if (uploadedByFilter !== "ALL" && c.uploadedBy?.id !== uploadedByFilter) return false;
+      if (from && to) {
+        const updated = localDateStr(c.updatedAt);
+        if (updated < from || updated > to) return false;
+      }
       if (query) {
         const haystack = `${c.name ?? ""} ${c.email ?? ""} ${c.phone ?? ""}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
     });
-  }, [candidates, statusFilter, categoryFilter, uploadedByFilter, search]);
+  }, [candidates, statusFilter, categoryFilter, uploadedByFilter, dateFrom, dateTo, search]);
 
   const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
 
@@ -101,7 +128,15 @@ export function CandidatesClient() {
     await loadCandidates();
   }
 
-  async function updateStatus(id: string, status: Status, statusReason: string) {
+  async function updateStatus(id: string, rawStatus: Status, statusReason: string) {
+    let status = rawStatus;
+
+    if (rawStatus === ADD_NEW_STATUS) {
+      const input = window.prompt("New status name:");
+      if (!input?.trim()) return;
+      status = input.trim();
+    }
+
     const res = await fetch(`/api/candidates/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -114,17 +149,22 @@ export function CandidatesClient() {
       return;
     }
 
+    const savedStatus: string = data.candidate.status;
     setCandidates((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
               ...c,
-              status: data.candidate.status,
+              status: savedStatus,
               statusReason: data.candidate.statusReason,
               reviewedBy: data.candidate.reviewedBy,
+              updatedAt: data.candidate.updatedAt,
             }
           : c,
       ),
+    );
+    setStatuses((prev) =>
+      prev.some((s) => s.toLowerCase() === savedStatus.toLowerCase()) ? prev : [...prev, savedStatus],
     );
   }
 
@@ -151,7 +191,9 @@ export function CandidatesClient() {
 
     const savedCategory: string = data.candidate.skillCategory;
     setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, skillCategory: savedCategory } : c)),
+      prev.map((c) =>
+        c.id === id ? { ...c, skillCategory: savedCategory, updatedAt: data.candidate.updatedAt } : c,
+      ),
     );
     setCategories((prev) =>
       prev.some((c) => c.toLowerCase() === savedCategory.toLowerCase())
@@ -174,7 +216,9 @@ export function CandidatesClient() {
     }
 
     setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: data.candidate[field] } : c)),
+      prev.map((c) =>
+        c.id === id ? { ...c, [field]: data.candidate[field], updatedAt: data.candidate.updatedAt } : c,
+      ),
     );
   }
 
@@ -192,7 +236,11 @@ export function CandidatesClient() {
     }
 
     setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, workLinks: data.candidate.workLinks } : c)),
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, workLinks: data.candidate.workLinks, updatedAt: data.candidate.updatedAt }
+          : c,
+      ),
     );
   }
 
@@ -210,8 +258,19 @@ export function CandidatesClient() {
     }
 
     setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, remarks: [data.remark, ...c.remarks] } : c)),
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, remarks: [data.remark, ...c.remarks], updatedAt: data.updatedAt }
+          : c,
+      ),
     );
+  }
+
+  function handleJdSent(id: string, remark: { id: string; text: string }) {
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, remarks: [remark, ...c.remarks] } : c)),
+    );
+    loadCandidates();
   }
 
   async function deleteCandidate(id: string, name: string | null): Promise<boolean> {
@@ -257,7 +316,7 @@ export function CandidatesClient() {
 
       {uploadError && <p className="text-sm text-red-500">{uploadError}</p>}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
           placeholder="Search by name, email or phone…"
@@ -268,13 +327,13 @@ export function CandidatesClient() {
 
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as Status | "ALL")}
+          onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded border border-black/15 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm"
         >
           <option value="ALL">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
+          {statuses.map((s) => (
             <option key={s} value={s}>
-              {STATUS_LABELS[s]}
+              {statusLabel(s)}
             </option>
           ))}
         </select>
@@ -304,6 +363,34 @@ export function CandidatesClient() {
             </option>
           ))}
         </select>
+
+        <div className="flex items-center gap-1 text-sm">
+          <span className="opacity-70">Changed</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1.5 text-sm"
+          />
+          <span className="opacity-70">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1.5 text-sm"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
+              className="text-xs opacity-60 hover:opacity-100"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -320,9 +407,9 @@ export function CandidatesClient() {
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-medium truncate">{c.name ?? "Unnamed candidate"}</h3>
                 <span
-                  className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[c.status]}`}
+                  className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${statusStyle(c.status)}`}
                 >
-                  {STATUS_LABELS[c.status]}
+                  {statusLabel(c.status)}
                 </span>
               </div>
 
@@ -332,6 +419,9 @@ export function CandidatesClient() {
               {c.uploadedBy && (
                 <p className="text-xs opacity-50">Uploaded by {c.uploadedBy.name}</p>
               )}
+              <p className="text-xs opacity-50">
+                Last changed {new Date(c.updatedAt).toLocaleDateString("en-GB")}
+              </p>
 
               <button
                 onClick={() => setSelectedId(c.id)}
@@ -348,12 +438,14 @@ export function CandidatesClient() {
         <CandidateModal
           candidate={selectedCandidate}
           categories={categories}
+          statuses={statuses}
           onClose={() => setSelectedId(null)}
           onUpdateStatus={updateStatus}
           onUpdateCategory={updateCategory}
           onUpdateTextField={updateTextField}
           onUpdateWorkLinks={updateWorkLinks}
           onAddRemark={addRemark}
+          onJdSent={handleJdSent}
           onDelete={deleteCandidate}
         />
       )}

@@ -10,16 +10,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum CandidateStatus {
-  PENDING
-  SELECTED
-  REJECTED
-  WAITLIST
-  INTERVIEW_TO_BE_SCHEDULED
-  INTERVIEW_SCHEDULED
-  INTERVIEW_CANCELLED
-}
-
 model HrUser {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -38,7 +28,7 @@ model Candidate {
   email         String?
   phone         String?
   skillCategory String?
-  status        CandidateStatus @default(PENDING)
+  status        String  @default("PENDING")
   statusReason  String?
 
   experience   String?

@@ -2,26 +2,29 @@
 
 import { useRef, useState } from "react";
 import { EditableTextCell, WorkLinksCell, RemarksCell } from "./EditableCells";
+import { SendJdModal } from "./SendJdModal";
 import {
   Candidate,
   Status,
   TextField,
-  STATUS_OPTIONS,
-  STATUS_LABELS,
-  STATUS_STYLES,
   STATUSES_REQUIRING_REASON,
   ADD_NEW_CATEGORY,
+  ADD_NEW_STATUS,
+  statusLabel,
+  statusStyle,
 } from "./types";
 
 interface CandidateModalProps {
   candidate: Candidate;
   categories: string[];
+  statuses: string[];
   onClose: () => void;
   onUpdateStatus: (id: string, status: Status, statusReason: string) => void;
   onUpdateCategory: (id: string, rawCategory: string) => void;
   onUpdateTextField: (id: string, field: TextField, value: string) => void;
   onUpdateWorkLinks: (id: string, links: string[]) => void;
   onAddRemark: (id: string, text: string) => void;
+  onJdSent: (id: string, remark: { id: string; text: string }) => void;
   onDelete: (id: string, name: string | null) => Promise<boolean>;
 }
 
@@ -37,16 +40,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function CandidateModal({
   candidate: c,
   categories,
+  statuses,
   onClose,
   onUpdateStatus,
   onUpdateCategory,
   onUpdateTextField,
   onUpdateWorkLinks,
   onAddRemark,
+  onJdSent,
   onDelete,
 }: CandidateModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [reason, setReason] = useState(c.statusReason ?? "");
+  const [sendingJd, setSendingJd] = useState(false);
   const isPdf = c.mimeType === "application/pdf";
   const previewUrl = `/api/candidates/${c.id}/resume`;
   const downloadUrl = `/api/candidates/${c.id}/resume?mode=download`;
@@ -122,11 +128,26 @@ export function CandidateModal({
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <Field label="Email">
-                <span>{c.email ?? "—"}</span>
+              <Field label="Name">
+                <EditableTextCell
+                  value={c.name}
+                  placeholder="Candidate name"
+                  onSave={(v) => onUpdateTextField(c.id, "name", v)}
+                />
               </Field>
               <Field label="Phone">
-                <span>{c.phone ?? "—"}</span>
+                <EditableTextCell
+                  value={c.phone}
+                  placeholder="Phone number"
+                  onSave={(v) => onUpdateTextField(c.id, "phone", v)}
+                />
+              </Field>
+              <Field label="Email">
+                <EditableTextCell
+                  value={c.email}
+                  placeholder="Email address"
+                  onSave={(v) => onUpdateTextField(c.id, "email", v)}
+                />
               </Field>
               <Field label="Uploaded">
                 <span>{new Date(c.createdAt).toLocaleDateString("en-GB")}</span>
@@ -157,16 +178,19 @@ export function CandidateModal({
                 value={c.status}
                 onChange={(e) => {
                   const nextStatus = e.target.value as Status;
-                  if (STATUSES_REQUIRING_REASON.has(nextStatus) && !reason.trim()) return;
+                  if (nextStatus !== ADD_NEW_STATUS && STATUSES_REQUIRING_REASON.has(nextStatus) && !reason.trim()) {
+                    return;
+                  }
                   onUpdateStatus(c.id, nextStatus, reason);
                 }}
-                className={`rounded px-2 py-1.5 text-sm font-medium ${STATUS_STYLES[c.status]}`}
+                className={`rounded px-2 py-1.5 text-sm font-medium ${statusStyle(c.status)}`}
               >
-                {STATUS_OPTIONS.map((s) => (
+                {statuses.map((s) => (
                   <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
+                    {statusLabel(s)}
                   </option>
                 ))}
+                <option value={ADD_NEW_STATUS}>+ Add new…</option>
               </select>
             </Field>
 
@@ -244,7 +268,7 @@ export function CandidateModal({
             </Field>
           </div>
 
-          <div className="border-t border-black/10 dark:border-white/15 p-4">
+          <div className="flex items-center justify-between border-t border-black/10 dark:border-white/15 p-4">
             <button
               onClick={async () => {
                 const deleted = await onDelete(c.id, c.name);
@@ -254,9 +278,27 @@ export function CandidateModal({
             >
               Delete candidate
             </button>
+            <button
+              onClick={() => setSendingJd(true)}
+              disabled={c.status !== "SELECTED"}
+              title={c.status !== "SELECTED" ? "Set status to Selected to send a JD" : undefined}
+              className="rounded bg-foreground text-background px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+            >
+              Send JD
+            </button>
           </div>
         </div>
       </div>
+
+      {sendingJd && (
+        <SendJdModal
+          candidateId={c.id}
+          candidateName={c.name}
+          candidateEmail={c.email}
+          onClose={() => setSendingJd(false)}
+          onSent={(remark) => onJdSent(c.id, remark)}
+        />
+      )}
     </div>
   );
 }

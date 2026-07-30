@@ -46,6 +46,7 @@ export async function GET() {
       fileName: true,
       mimeType: true,
       createdAt: true,
+      updatedAt: true,
       reviewedBy: { select: { name: true } },
       uploadedBy: { select: { id: true, name: true } },
       remarks: { orderBy: { createdAt: "desc" }, select: { id: true, text: true } },

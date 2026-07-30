@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-function formatRemarkDate(date: Date): string {
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = date.toLocaleDateString("en-US", { month: "short" });
-  return `${day}-${month}`;
-}
+import { formatRemarkDate } from "@/lib/remarkDate";
+import { touchCandidateUpdatedAt } from "@/lib/touchCandidate";
 
 export async function POST(
   req: NextRequest,
@@ -34,6 +30,7 @@ export async function POST(
     },
     select: { id: true, text: true },
   });
+  const updatedAt = await touchCandidateUpdatedAt(id);
 
-  return NextResponse.json({ remark });
+  return NextResponse.json({ remark, updatedAt });
 }
