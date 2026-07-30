@@ -29,6 +29,7 @@ model HrUser {
 
   reviewedCandidates Candidate[] @relation("ReviewedCandidates")
   uploadedCandidates Candidate[] @relation("UploadedCandidates")
+  jobDescriptions    JobDescription[]
 }
 
 model Candidate {
@@ -70,4 +71,16 @@ model Remark {
   createdAt   DateTime @default(now())
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model JobDescription {
+  id      String @id @default(cuid())
+  title   String
+  content String
+
+  createdById String
+  createdBy   HrUser @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
