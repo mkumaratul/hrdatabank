@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sanitizeJobDescriptionHtml } from "@/lib/sanitizeJobDescriptionHtml";
 
 export async function GET() {
   const session = await auth();
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   const jobDescription = await prisma.jobDescription.create({
     data: {
       title: title.trim(),
-      content: content.trim(),
+      content: sanitizeJobDescriptionHtml(content),
       createdById: session.user.id,
     },
     select: {

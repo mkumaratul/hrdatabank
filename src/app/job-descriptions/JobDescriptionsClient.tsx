@@ -103,7 +103,9 @@ export function JobDescriptionsClient() {
                   </span>
                 )}
               </div>
-              <p className="mt-1 line-clamp-2 text-sm opacity-70">{jd.content}</p>
+              <p className="mt-1 line-clamp-2 text-sm opacity-70">
+                {jd.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()}
+              </p>
               <p className="mt-2 text-xs opacity-50">
                 By {jd.createdBy.name} · {new Date(jd.updatedAt).toLocaleDateString("en-GB")}
               </p>

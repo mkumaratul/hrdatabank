@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { RichTextEditor, RichTextView } from "./RichTextEditor";
+
+function isHtmlEmpty(html: string): boolean {
+  return html.replace(/<[^>]*>/g, "").trim().length === 0;
+}
 
 export interface JobDescription {
   id: string;
@@ -85,15 +90,9 @@ export function JobDescriptionModal({
           )}
 
           {editable ? (
-            <textarea
-              placeholder="Job description details…"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={14}
-              className="w-full rounded border border-black/15 dark:border-white/20 bg-transparent px-3 py-2 text-sm"
-            />
+            <RichTextEditor content={content} onChange={setContent} />
           ) : (
-            <p className="whitespace-pre-wrap text-sm">{jobDescription?.content}</p>
+            <RichTextView html={jobDescription?.content ?? ""} />
           )}
         </div>
 
@@ -116,7 +115,7 @@ export function JobDescriptionModal({
 
             <button
               onClick={handleSave}
-              disabled={saving || !title.trim() || !content.trim()}
+              disabled={saving || !title.trim() || isHtmlEmpty(content)}
               className="rounded bg-foreground text-background px-4 py-1.5 text-sm font-medium disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save"}
