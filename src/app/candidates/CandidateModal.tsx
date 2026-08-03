@@ -178,10 +178,18 @@ export function CandidateModal({
                 value={c.status}
                 onChange={(e) => {
                   const nextStatus = e.target.value as Status;
+                  let nextReason = reason;
+
                   if (nextStatus !== ADD_NEW_STATUS && STATUSES_REQUIRING_REASON.has(nextStatus) && !reason.trim()) {
-                    return;
+                    const input = window.prompt(
+                      `A reason is required to set status to "${statusLabel(nextStatus)}":`,
+                    );
+                    if (!input?.trim()) return;
+                    nextReason = input.trim();
+                    setReason(nextReason);
                   }
-                  onUpdateStatus(c.id, nextStatus, reason);
+
+                  onUpdateStatus(c.id, nextStatus, nextReason);
                 }}
                 className={`rounded px-2 py-1.5 text-sm font-medium ${statusStyle(c.status)}`}
               >
