@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.brandcatapult.hrdatabank",
+      "sha256_cert_fingerprints": [
+        "37:25:AD:49:34:55:71:14:94:D0:6E:AC:2C:31:7B:38:5C:43:83:82:E1:ED:76:7A:04:C1:46:9C:1E:3C:44:3A"
+      ]
+    }
+  }
+]
