@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { touchCandidateUpdatedAt } from "@/lib/touchCandidate";
-import { resourceTypeForMime, uploadToCloudinary } from "@/lib/cloudinary";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -74,15 +74,14 @@ export async function POST(
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const resourceType = resourceTypeForMime(file.type);
-    const { publicId } = await uploadToCloudinary(buffer, "hrdatabank/attachments", resourceType);
+    const { publicId } = await uploadToCloudinary(buffer, "hrdatabank/attachments");
 
     const attachment = await prisma.candidateAttachment.create({
       data: {
         fileName: file.name,
         mimeType: file.type,
         cloudinaryPublicId: publicId,
-        cloudinaryResourceType: resourceType,
+        cloudinaryResourceType: "raw",
         candidateId: id,
       },
       select: { id: true, fileName: true, mimeType: true, createdAt: true },

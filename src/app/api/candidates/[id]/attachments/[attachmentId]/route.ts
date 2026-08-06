@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { touchCandidateUpdatedAt } from "@/lib/touchCandidate";
-import { CloudinaryResourceType, deleteFromCloudinary, signedDeliveryUrl } from "@/lib/cloudinary";
+import { deleteFromCloudinary, fetchFromCloudinary } from "@/lib/cloudinary";
 
 export async function GET(
   req: NextRequest,
@@ -21,7 +21,6 @@ export async function GET(
       fileName: true,
       mimeType: true,
       cloudinaryPublicId: true,
-      cloudinaryResourceType: true,
     },
   });
 
@@ -32,20 +31,15 @@ export async function GET(
   const mode = req.nextUrl.searchParams.get("mode") === "download" ? "download" : "inline";
   const safeFileName = attachment.fileName.replace(/"/g, "");
 
-  if (attachment.cloudinaryPublicId) {
-    const url = signedDeliveryUrl(
-      attachment.cloudinaryPublicId,
-      (attachment.cloudinaryResourceType as CloudinaryResourceType) ?? "raw",
-      mode,
-    );
-    return NextResponse.redirect(url);
-  }
+  const fileData = attachment.cloudinaryPublicId
+    ? await fetchFromCloudinary(attachment.cloudinaryPublicId)
+    : attachment.fileData;
 
-  if (!attachment.fileData) {
+  if (!fileData) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
-  return new NextResponse(attachment.fileData, {
+  return new NextResponse(new Uint8Array(fileData), {
     headers: {
       "Content-Type": attachment.mimeType,
       "Content-Disposition": `${mode === "download" ? "attachment" : "inline"}; filename="${safeFileName}"`,
@@ -65,7 +59,7 @@ export async function DELETE(
   const { id, attachmentId } = await params;
   const attachment = await prisma.candidateAttachment.findFirst({
     where: { id: attachmentId, candidateId: id },
-    select: { id: true, cloudinaryPublicId: true, cloudinaryResourceType: true },
+    select: { id: true, cloudinaryPublicId: true },
   });
 
   if (!attachment) {
@@ -75,10 +69,7 @@ export async function DELETE(
   await prisma.candidateAttachment.delete({ where: { id: attachmentId } });
 
   if (attachment.cloudinaryPublicId) {
-    await deleteFromCloudinary(
-      attachment.cloudinaryPublicId,
-      (attachment.cloudinaryResourceType as CloudinaryResourceType) ?? "raw",
-    );
+    await deleteFromCloudinary(attachment.cloudinaryPublicId);
   }
 
   const updatedAt = await touchCandidateUpdatedAt(id);

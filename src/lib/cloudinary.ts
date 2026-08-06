@@ -7,20 +7,22 @@ cloudinary.config({
   secure: true,
 });
 
-export type CloudinaryResourceType = "image" | "raw";
-
-export function resourceTypeForMime(mimeType: string): CloudinaryResourceType {
-  return mimeType.startsWith("image/") ? "image" : "raw";
-}
+// Always stored as "raw" — regardless of file type (pdf, doc, docx, jpg, png, ...).
+// Cloudinary's "image" resource type (needed for its own PDF/image transformation
+// pipeline) is blocked by this account's security restrictions on authenticated
+// delivery, and "raw" delivery doesn't let Cloudinary set a reliable Content-Type
+// or avoid forcing Content-Disposition: attachment. We work around both by fetching
+// the raw bytes server-side and serving them ourselves with the correct headers,
+// sourced from our own DB (fileName/mimeType) rather than Cloudinary's guesses.
+const RESOURCE_TYPE = "raw";
 
 export async function uploadToCloudinary(
   buffer: Buffer,
   folder: string,
-  resourceType: CloudinaryResourceType,
 ): Promise<{ publicId: string }> {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType, type: "authenticated" },
+      { folder, resource_type: RESOURCE_TYPE, type: "authenticated" },
       (error, result) => {
         if (error || !result) {
           reject(error ?? new Error("Cloudinary upload failed"));
@@ -33,27 +35,28 @@ export async function uploadToCloudinary(
   });
 }
 
-export function deleteFromCloudinary(
-  publicId: string,
-  resourceType: CloudinaryResourceType,
-): Promise<unknown> {
+export function deleteFromCloudinary(publicId: string): Promise<unknown> {
   return cloudinary.uploader.destroy(publicId, {
-    resource_type: resourceType,
+    resource_type: RESOURCE_TYPE,
     type: "authenticated",
   });
 }
 
-// Short-lived signed URL — must be requested fresh behind our own auth() check each time.
-export function signedDeliveryUrl(
-  publicId: string,
-  resourceType: CloudinaryResourceType,
-  mode: "inline" | "download",
-): string {
-  const expiresAt = Math.floor(Date.now() / 1000) + 60;
-  return cloudinary.utils.private_download_url(publicId, "", {
-    resource_type: resourceType,
+// Non-expiring signed delivery URL — only ever fetched server-side, from behind our
+// own auth() check on each request, and never exposed to the client directly.
+function signedUrl(publicId: string): string {
+  return cloudinary.url(publicId, {
+    resource_type: RESOURCE_TYPE,
     type: "authenticated",
-    expires_at: expiresAt,
-    attachment: mode === "download",
+    sign_url: true,
+    secure: true,
   });
+}
+
+export async function fetchFromCloudinary(publicId: string): Promise<Buffer> {
+  const res = await fetch(signedUrl(publicId));
+  if (!res.ok) {
+    throw new Error(`Cloudinary fetch failed for ${publicId}: ${res.status}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
 }

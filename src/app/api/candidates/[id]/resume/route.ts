@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CloudinaryResourceType, signedDeliveryUrl } from "@/lib/cloudinary";
+import { fetchFromCloudinary } from "@/lib/cloudinary";
 
 export async function GET(
   req: NextRequest,
@@ -20,7 +20,6 @@ export async function GET(
       fileName: true,
       mimeType: true,
       cloudinaryPublicId: true,
-      cloudinaryResourceType: true,
     },
   });
 
@@ -31,21 +30,15 @@ export async function GET(
   const mode = req.nextUrl.searchParams.get("mode") === "download" ? "download" : "inline";
   const safeFileName = candidate.fileName.replace(/"/g, "");
 
-  if (candidate.cloudinaryPublicId) {
-    const url = signedDeliveryUrl(
-      candidate.cloudinaryPublicId,
-      (candidate.cloudinaryResourceType as CloudinaryResourceType) ?? "raw",
-      mode,
-    );
-    return NextResponse.redirect(url);
-  }
+  const fileData = candidate.cloudinaryPublicId
+    ? await fetchFromCloudinary(candidate.cloudinaryPublicId)
+    : candidate.fileData;
 
-  // Legacy rows uploaded before the Cloudinary migration still carry raw bytes.
-  if (!candidate.fileData) {
+  if (!fileData) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
-  return new NextResponse(candidate.fileData, {
+  return new NextResponse(new Uint8Array(fileData), {
     headers: {
       "Content-Type": candidate.mimeType,
       "Content-Disposition": `${mode === "download" ? "attachment" : "inline"}; filename="${safeFileName}"`,
