@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function EditableTextCell({
   value,
@@ -78,6 +78,116 @@ export function WorkLinksCell({
         }}
         className="w-full rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
       />
+    </div>
+  );
+}
+
+interface Attachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  createdAt: string;
+}
+
+export function AttachmentsCell({ candidateId }: { candidateId: string }) {
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch(`/api/candidates/${candidateId}/attachments`);
+    if (res.ok) {
+      const data = await res.json();
+      setAttachments(data.attachments);
+    }
+    setLoading(false);
+  }, [candidateId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    setError(null);
+
+    const formData = new FormData();
+    Array.from(files).forEach((f) => formData.append("files", f));
+
+    const res = await fetch(`/api/candidates/${candidateId}/attachments`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error ?? "Upload failed");
+    } else if (data.skipped?.length) {
+      setError(
+        `Skipped: ${data.skipped.map((s: { fileName: string; reason: string }) => `${s.fileName} (${s.reason})`).join(", ")}`,
+      );
+    }
+
+    setUploading(false);
+    if (inputRef.current) inputRef.current.value = "";
+    await load();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Remove this file?")) return;
+    const res = await fetch(`/api/candidates/${candidateId}/attachments/${id}`, {
+      method: "DELETE",
+    });
+    if (res.ok) setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  return (
+    <div className="flex flex-col gap-1 min-w-[180px]">
+      {loading ? (
+        <span className="text-xs opacity-60">Loading…</span>
+      ) : attachments.length === 0 ? (
+        <span className="text-xs opacity-60">No additional files</span>
+      ) : (
+        attachments.map((a) => (
+          <div key={a.id} className="flex items-center gap-1">
+            <a
+              href={`/api/candidates/${candidateId}/attachments/${a.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate underline text-xs max-w-[150px]"
+              title={a.fileName}
+            >
+              {a.fileName}
+            </a>
+            <button
+              onClick={() => handleDelete(a.id)}
+              className="text-xs opacity-60 hover:opacity-100"
+              aria-label="Remove file"
+            >
+              ×
+            </button>
+          </div>
+        ))
+      )}
+      {error && <span className="text-xs text-red-500">{error}</span>}
+      <label className="text-xs underline cursor-pointer opacity-80 hover:opacity-100 w-fit">
+        {uploading ? "Uploading…" : "+ add file"}
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt"
+          className="hidden"
+          onChange={handleUpload}
+          disabled={uploading}
+        />
+      </label>
     </div>
   );
 }

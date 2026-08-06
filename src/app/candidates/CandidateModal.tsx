@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { EditableTextCell, WorkLinksCell, RemarksCell } from "./EditableCells";
+import { EditableTextCell, WorkLinksCell, RemarksCell, AttachmentsCell } from "./EditableCells";
 import { SendJdModal } from "./SendJdModal";
 import {
   Candidate,
@@ -269,6 +269,10 @@ export function CandidateModal({
                   )
                 }
               />
+            </Field>
+
+            <Field label="Additional Files">
+              <AttachmentsCell candidateId={c.id} />
             </Field>
 
             <Field label="Remarks">

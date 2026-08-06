@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
+    "migrate:cloudinary": "tsx prisma/migrateToCloudinary.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "@tiptap/react": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.10.0",
     "exceljs": "^4.4.0",
     "mammoth": "^1.12.0",
     "next": "16.2.12",

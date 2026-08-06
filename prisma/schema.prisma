@@ -40,8 +40,11 @@ model Candidate {
 
   fileName String
   mimeType String
-  fileData Bytes
+  fileData Bytes?
   rawText  String?
+
+  cloudinaryPublicId   String?
+  cloudinaryResourceType String?
 
   reviewedById String?
   reviewedBy   HrUser? @relation("ReviewedCandidates", fields: [reviewedById], references: [id])
@@ -49,10 +52,26 @@ model Candidate {
   uploadedById String?
   uploadedBy   HrUser? @relation("UploadedCandidates", fields: [uploadedById], references: [id])
 
-  remarks Remark[]
+  remarks     Remark[]
+  attachments CandidateAttachment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CandidateAttachment {
+  id       String @id @default(cuid())
+  fileName String
+  mimeType String
+  fileData Bytes?
+
+  cloudinaryPublicId     String?
+  cloudinaryResourceType String?
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 }
 
 model Remark {

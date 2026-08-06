@@ -13,6 +13,8 @@ import {
   statusStyle,
 } from "./types";
 
+const CARDS_PER_PAGE = 18;
+
 export function CandidatesClient() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +26,7 @@ export function CandidatesClient() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>(BUILT_IN_STATUSES);
@@ -99,6 +102,17 @@ export function CandidatesClient() {
       return true;
     });
   }, [candidates, statusFilter, categoryFilter, uploadedByFilter, dateFrom, dateTo, search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, categoryFilter, uploadedByFilter, dateFrom, dateTo, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CARDS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice(
+    (currentPage - 1) * CARDS_PER_PAGE,
+    currentPage * CARDS_PER_PAGE,
+  );
 
   const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
 
@@ -399,7 +413,7 @@ export function CandidatesClient() {
         <p className="text-sm opacity-70">No candidates yet. Upload a resume to get started.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((c) => (
+          {paginated.map((c) => (
             <div
               key={c.id}
               className="flex flex-col gap-2 rounded-lg border border-black/10 dark:border-white/15 p-4"
@@ -431,6 +445,28 @@ export function CandidatesClient() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {!loading && filtered.length > CARDS_PER_PAGE && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-sm opacity-70">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
 

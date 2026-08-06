@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseResume } from "@/lib/parseResume";
+import { resourceTypeForMime, uploadToCloudinary } from "@/lib/cloudinary";
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -104,6 +105,9 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    const resourceType = resourceTypeForMime(file.type);
+    const { publicId } = await uploadToCloudinary(buffer, "hrdatabank/resumes", resourceType);
+
     const candidate = await prisma.candidate.create({
       data: {
         name: parsed.name,
@@ -119,7 +123,8 @@ export async function POST(req: NextRequest) {
         rawText: parsed.rawText.slice(0, 20000),
         fileName: file.name,
         mimeType: file.type,
-        fileData: buffer,
+        cloudinaryPublicId: publicId,
+        cloudinaryResourceType: resourceType,
         uploadedById: session.user.id,
       },
       select: {
