@@ -10,7 +10,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/msword",
 ]);
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 40 * 1024 * 1024; // 40MB
 
 function normalizeEmail(email: string | null): string | null {
   const trimmed = email?.trim().toLowerCase();
@@ -106,7 +106,16 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const { publicId } = await uploadToCloudinary(buffer, "hrdatabank/resumes");
+    let publicId: string;
+    try {
+      ({ publicId } = await uploadToCloudinary(buffer, "hrdatabank/resumes"));
+    } catch (err) {
+      skipped.push({
+        fileName: file.name,
+        reason: err instanceof Error ? err.message : "Upload to storage failed",
+      });
+      continue;
+    }
 
     const candidate = await prisma.candidate.create({
       data: {

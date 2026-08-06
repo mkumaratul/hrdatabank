@@ -16,7 +16,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "text/plain",
 ]);
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 40 * 1024 * 1024; // 40MB
 
 export async function GET(
   _req: NextRequest,
@@ -74,7 +74,16 @@ export async function POST(
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const { publicId } = await uploadToCloudinary(buffer, "hrdatabank/attachments");
+    let publicId: string;
+    try {
+      ({ publicId } = await uploadToCloudinary(buffer, "hrdatabank/attachments"));
+    } catch (err) {
+      skipped.push({
+        fileName: file.name,
+        reason: err instanceof Error ? err.message : "Upload to storage failed",
+      });
+      continue;
+    }
 
     const attachment = await prisma.candidateAttachment.create({
       data: {
