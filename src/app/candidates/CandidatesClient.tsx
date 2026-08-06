@@ -107,6 +107,15 @@ export function CandidatesClient() {
     setPage(1);
   }, [statusFilter, categoryFilter, uploadedByFilter, dateFrom, dateTo, search]);
 
+  const counts = useMemo(() => {
+    const total = candidates.length;
+    const rejected = candidates.filter((c) => c.status === "REJECTED").length;
+    const interviewToBeScheduled = candidates.filter(
+      (c) => c.status === "INTERVIEW_TO_BE_SCHEDULED",
+    ).length;
+    return { total, rejected, interviewToBeScheduled };
+  }, [candidates]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / CARDS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice(
@@ -303,7 +312,20 @@ export function CandidatesClient() {
   return (
     <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto w-full">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Candidates</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold">Candidates</h1>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-black/5 dark:bg-white/10 px-2.5 py-1 font-medium">
+              Total: {counts.total}
+            </span>
+            <span className="rounded-full bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-200 px-2.5 py-1 font-medium">
+              Rejected: {counts.rejected}
+            </span>
+            <span className="rounded-full bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-200 px-2.5 py-1 font-medium">
+              Interview to be scheduled: {counts.interviewToBeScheduled}
+            </span>
+          </div>
+        </div>
 
         <div className="flex items-center gap-3">
           <label className="rounded bg-foreground text-background px-4 py-2 text-sm font-medium cursor-pointer">
