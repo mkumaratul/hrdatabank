@@ -39,20 +39,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// Repeatedly prompts until a valid YYYY-MM-DD date is entered, or the user cancels (returns null).
-function promptForInterviewDate(current: string | null): string | null {
-  let defaultValue = current ? current.slice(0, 10) : "";
-  while (true) {
-    const input = window.prompt("Interview date (YYYY-MM-DD):", defaultValue);
-    if (input === null) return null;
-    const trimmed = input.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) && !Number.isNaN(new Date(trimmed).getTime())) {
-      return trimmed;
-    }
-    defaultValue = trimmed;
-    alert("Please enter a valid date in YYYY-MM-DD format.");
-  }
-}
+type DatePickerState = { mode: "status"; status: Status; reason: string } | { mode: "standalone" };
 
 export function CandidateModal({
   candidate: c,
@@ -71,10 +58,13 @@ export function CandidateModal({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [reason, setReason] = useState(c.statusReason ?? "");
   const [sendingJd, setSendingJd] = useState(false);
+  const [datePicker, setDatePicker] = useState<DatePickerState | null>(null);
+  const [dateDraft, setDateDraft] = useState("");
   const isPdf = c.mimeType === "application/pdf";
   const previewUrl = `/api/candidates/${c.id}/resume`;
   const downloadUrl = `/api/candidates/${c.id}/resume?mode=download`;
   const reasonRequired = STATUSES_REQUIRING_REASON.has(c.status);
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   function handlePrint() {
     iframeRef.current?.contentWindow?.print();
@@ -207,14 +197,13 @@ export function CandidateModal({
                     setReason(nextReason);
                   }
 
-                  let nextInterviewDate: string | undefined;
                   if (nextStatus !== ADD_NEW_STATUS && STATUSES_REQUIRING_INTERVIEW_DATE.has(nextStatus)) {
-                    const date = promptForInterviewDate(c.interviewDate);
-                    if (!date) return;
-                    nextInterviewDate = date;
+                    setDateDraft(c.interviewDate ? c.interviewDate.slice(0, 10) : todayStr);
+                    setDatePicker({ mode: "status", status: nextStatus, reason: nextReason });
+                    return;
                   }
 
-                  onUpdateStatus(c.id, nextStatus, nextReason, nextInterviewDate);
+                  onUpdateStatus(c.id, nextStatus, nextReason);
                 }}
                 className={`rounded px-2 py-1.5 text-sm font-medium ${statusStyle(c.status)}`}
               >
@@ -245,24 +234,57 @@ export function CandidateModal({
               </div>
             </Field>
 
-            {(c.status === "INTERVIEW_SCHEDULED" || c.interviewDate) && (
+            {(c.status === "INTERVIEW_SCHEDULED" || c.interviewDate || datePicker?.mode === "status") && (
               <Field label="Interview Date">
-                <div className="flex items-center gap-2">
-                  <span>
-                    {c.interviewDate
-                      ? new Date(c.interviewDate).toLocaleDateString("en-GB")
-                      : "—"}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const date = promptForInterviewDate(c.interviewDate);
-                      if (date) onUpdateInterviewDate(c.id, date);
-                    }}
-                    className="text-xs opacity-60 hover:opacity-100 underline"
-                  >
-                    {c.interviewDate ? "Change" : "Set"}
-                  </button>
-                </div>
+                {datePicker ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      min={todayStr}
+                      value={dateDraft}
+                      onChange={(e) => setDateDraft(e.target.value)}
+                      className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1.5 text-sm"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!dateDraft || dateDraft < todayStr) return;
+                        if (datePicker.mode === "status") {
+                          onUpdateStatus(c.id, datePicker.status, datePicker.reason, dateDraft);
+                        } else {
+                          onUpdateInterviewDate(c.id, dateDraft);
+                        }
+                        setDatePicker(null);
+                      }}
+                      disabled={!dateDraft || dateDraft < todayStr}
+                      className="rounded bg-foreground text-background px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setDatePicker(null)}
+                      className="text-xs opacity-60 hover:opacity-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span>
+                      {c.interviewDate
+                        ? new Date(c.interviewDate).toLocaleDateString("en-GB")
+                        : "—"}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setDateDraft(c.interviewDate ? c.interviewDate.slice(0, 10) : todayStr);
+                        setDatePicker({ mode: "standalone" });
+                      }}
+                      className="text-xs opacity-60 hover:opacity-100 underline"
+                    >
+                      {c.interviewDate ? "Change" : "Set"}
+                    </button>
+                  </div>
+                )}
               </Field>
             )}
 
