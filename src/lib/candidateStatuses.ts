@@ -18,6 +18,8 @@ export const STATUSES_REQUIRING_REASON = new Set<string>([
   "INTERVIEW_REJECTED",
 ]);
 
+export const STATUSES_REQUIRING_INTERVIEW_DATE = new Set<string>(["INTERVIEW_SCHEDULED"]);
+
 export async function listStatuses(): Promise<string[]> {
   const rows = await prisma.candidate.findMany({
     select: { status: true },

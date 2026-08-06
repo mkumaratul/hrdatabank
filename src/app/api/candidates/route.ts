@@ -38,6 +38,7 @@ export async function GET() {
       skillCategory: true,
       status: true,
       statusReason: true,
+      interviewDate: true,
       experience: true,
       currentCtc: true,
       expectedCtc: true,

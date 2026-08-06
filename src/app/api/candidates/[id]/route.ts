@@ -3,7 +3,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { resolveCategory } from "@/lib/skillCategories";
-import { resolveStatus, STATUSES_REQUIRING_REASON } from "@/lib/candidateStatuses";
+import {
+  resolveStatus,
+  STATUSES_REQUIRING_REASON,
+  STATUSES_REQUIRING_INTERVIEW_DATE,
+} from "@/lib/candidateStatuses";
 
 const TEXT_FIELDS = [
   "name",
@@ -28,12 +32,14 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { status, statusReason, skillCategory, workLinks, ...textFields } = body as {
-    status?: string;
-    statusReason?: string;
-    skillCategory?: string;
-    workLinks?: string[];
-  } & Partial<Record<TextField, string>>;
+  const { status, statusReason, interviewDate, skillCategory, workLinks, ...textFields } =
+    body as {
+      status?: string;
+      statusReason?: string;
+      interviewDate?: string | null;
+      skillCategory?: string;
+      workLinks?: string[];
+    } & Partial<Record<TextField, string>>;
 
   const data: Prisma.CandidateUpdateInput = {};
 
@@ -52,9 +58,28 @@ export async function PATCH(
       );
     }
 
+    if (STATUSES_REQUIRING_INTERVIEW_DATE.has(resolvedStatus) && !interviewDate) {
+      return NextResponse.json(
+        { error: "An interview date is required for this status" },
+        { status: 400 },
+      );
+    }
+
     data.status = resolvedStatus;
     data.statusReason = statusReason?.trim() || null;
     data.reviewedBy = { connect: { id: session.user.id } };
+  }
+
+  if (interviewDate !== undefined) {
+    if (interviewDate === null || interviewDate === "") {
+      data.interviewDate = null;
+    } else {
+      const parsed = new Date(interviewDate);
+      if (Number.isNaN(parsed.getTime())) {
+        return NextResponse.json({ error: "Invalid interview date" }, { status: 400 });
+      }
+      data.interviewDate = parsed;
+    }
   }
 
   if (skillCategory !== undefined) {
@@ -90,6 +115,7 @@ export async function PATCH(
       phone: true,
       status: true,
       statusReason: true,
+      interviewDate: true,
       skillCategory: true,
       experience: true,
       currentCtc: true,

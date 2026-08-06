@@ -8,6 +8,7 @@ import {
   Status,
   TextField,
   STATUSES_REQUIRING_REASON,
+  STATUSES_REQUIRING_INTERVIEW_DATE,
   ADD_NEW_CATEGORY,
   ADD_NEW_STATUS,
   statusLabel,
@@ -19,7 +20,8 @@ interface CandidateModalProps {
   categories: string[];
   statuses: string[];
   onClose: () => void;
-  onUpdateStatus: (id: string, status: Status, statusReason: string) => void;
+  onUpdateStatus: (id: string, status: Status, statusReason: string, interviewDate?: string) => void;
+  onUpdateInterviewDate: (id: string, date: string) => void;
   onUpdateCategory: (id: string, rawCategory: string) => void;
   onUpdateTextField: (id: string, field: TextField, value: string) => void;
   onUpdateWorkLinks: (id: string, links: string[]) => void;
@@ -37,12 +39,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+// Repeatedly prompts until a valid YYYY-MM-DD date is entered, or the user cancels (returns null).
+function promptForInterviewDate(current: string | null): string | null {
+  let defaultValue = current ? current.slice(0, 10) : "";
+  while (true) {
+    const input = window.prompt("Interview date (YYYY-MM-DD):", defaultValue);
+    if (input === null) return null;
+    const trimmed = input.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) && !Number.isNaN(new Date(trimmed).getTime())) {
+      return trimmed;
+    }
+    defaultValue = trimmed;
+    alert("Please enter a valid date in YYYY-MM-DD format.");
+  }
+}
+
 export function CandidateModal({
   candidate: c,
   categories,
   statuses,
   onClose,
   onUpdateStatus,
+  onUpdateInterviewDate,
   onUpdateCategory,
   onUpdateTextField,
   onUpdateWorkLinks,
@@ -189,7 +207,14 @@ export function CandidateModal({
                     setReason(nextReason);
                   }
 
-                  onUpdateStatus(c.id, nextStatus, nextReason);
+                  let nextInterviewDate: string | undefined;
+                  if (nextStatus !== ADD_NEW_STATUS && STATUSES_REQUIRING_INTERVIEW_DATE.has(nextStatus)) {
+                    const date = promptForInterviewDate(c.interviewDate);
+                    if (!date) return;
+                    nextInterviewDate = date;
+                  }
+
+                  onUpdateStatus(c.id, nextStatus, nextReason, nextInterviewDate);
                 }}
                 className={`rounded px-2 py-1.5 text-sm font-medium ${statusStyle(c.status)}`}
               >
@@ -219,6 +244,27 @@ export function CandidateModal({
                 </button>
               </div>
             </Field>
+
+            {(c.status === "INTERVIEW_SCHEDULED" || c.interviewDate) && (
+              <Field label="Interview Date">
+                <div className="flex items-center gap-2">
+                  <span>
+                    {c.interviewDate
+                      ? new Date(c.interviewDate).toLocaleDateString("en-GB")
+                      : "—"}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const date = promptForInterviewDate(c.interviewDate);
+                      if (date) onUpdateInterviewDate(c.id, date);
+                    }}
+                    className="text-xs opacity-60 hover:opacity-100 underline"
+                  >
+                    {c.interviewDate ? "Change" : "Set"}
+                  </button>
+                </div>
+              </Field>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Relevant Experience">

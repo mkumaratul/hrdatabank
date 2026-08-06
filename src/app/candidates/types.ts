@@ -23,6 +23,7 @@ export interface Candidate {
   skillCategory: string | null;
   status: Status;
   statusReason: string | null;
+  interviewDate: string | null;
   experience: string | null;
   currentCtc: string | null;
   expectedCtc: string | null;
@@ -55,6 +56,8 @@ export const STATUSES_REQUIRING_REASON = new Set<string>([
   "INTERVIEW_CANCELLED",
   "INTERVIEW_REJECTED",
 ]);
+
+export const STATUSES_REQUIRING_INTERVIEW_DATE = new Set<string>(["INTERVIEW_SCHEDULED"]);
 
 export const ADD_NEW_CATEGORY = "__ADD_NEW__";
 export const ADD_NEW_STATUS = "__ADD_NEW_STATUS__";

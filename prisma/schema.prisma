@@ -30,6 +30,7 @@ model Candidate {
   skillCategory String?
   status        String  @default("PENDING")
   statusReason  String?
+  interviewDate DateTime?
 
   experience   String?
   currentCtc   String?

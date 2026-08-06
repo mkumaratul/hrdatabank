@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { CandidateModal } from "./CandidateModal";
 import {
   Candidate,
@@ -16,6 +17,8 @@ import {
 const CARDS_PER_PAGE = 18;
 
 export function CandidatesClient() {
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get("status");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -74,6 +77,10 @@ export function CandidatesClient() {
     loadHrUsers();
   }, [loadCandidates, loadCategories, loadStatuses, loadHrUsers]);
 
+  useEffect(() => {
+    setStatusFilter(statusParam ?? "ALL");
+  }, [statusParam]);
+
   function localDateStr(iso: string): string {
     const d = new Date(iso);
     const y = d.getFullYear();
@@ -107,18 +114,37 @@ export function CandidatesClient() {
     setPage(1);
   }, [statusFilter, categoryFilter, uploadedByFilter, dateFrom, dateTo, search]);
 
+  const todayStr = localDateStr(new Date().toISOString());
+
   const counts = useMemo(() => {
     const total = candidates.length;
     const rejected = candidates.filter((c) => c.status === "REJECTED").length;
     const interviewToBeScheduled = candidates.filter(
       (c) => c.status === "INTERVIEW_TO_BE_SCHEDULED",
     ).length;
-    return { total, rejected, interviewToBeScheduled };
-  }, [candidates]);
+    const interviewScheduledToday = candidates.filter(
+      (c) => c.status === "INTERVIEW_SCHEDULED" && c.interviewDate && localDateStr(c.interviewDate) === todayStr,
+    ).length;
+    return { total, rejected, interviewToBeScheduled, interviewScheduledToday };
+  }, [candidates, todayStr]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / CARDS_PER_PAGE));
+  // "Interview Scheduled" view: only upcoming interviews (today onward), earliest first.
+  const displayCandidates = useMemo(() => {
+    if (statusFilter !== "INTERVIEW_SCHEDULED") return filtered;
+
+    return [...filtered]
+      .filter((c) => !c.interviewDate || localDateStr(c.interviewDate) >= todayStr)
+      .sort((a, b) => {
+        if (!a.interviewDate && !b.interviewDate) return 0;
+        if (!a.interviewDate) return 1;
+        if (!b.interviewDate) return -1;
+        return a.interviewDate.localeCompare(b.interviewDate);
+      });
+  }, [filtered, statusFilter, todayStr]);
+
+  const totalPages = Math.max(1, Math.ceil(displayCandidates.length / CARDS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice(
+  const paginated = displayCandidates.slice(
     (currentPage - 1) * CARDS_PER_PAGE,
     currentPage * CARDS_PER_PAGE,
   );
@@ -151,7 +177,12 @@ export function CandidatesClient() {
     await loadCandidates();
   }
 
-  async function updateStatus(id: string, rawStatus: Status, statusReason: string) {
+  async function updateStatus(
+    id: string,
+    rawStatus: Status,
+    statusReason: string,
+    interviewDate?: string,
+  ) {
     let status = rawStatus;
 
     if (rawStatus === ADD_NEW_STATUS) {
@@ -163,7 +194,7 @@ export function CandidatesClient() {
     const res = await fetch(`/api/candidates/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, statusReason }),
+      body: JSON.stringify({ status, statusReason, interviewDate }),
     });
     const data = await res.json();
 
@@ -180,6 +211,7 @@ export function CandidatesClient() {
               ...c,
               status: savedStatus,
               statusReason: data.candidate.statusReason,
+              interviewDate: data.candidate.interviewDate,
               reviewedBy: data.candidate.reviewedBy,
               updatedAt: data.candidate.updatedAt,
             }
@@ -188,6 +220,28 @@ export function CandidatesClient() {
     );
     setStatuses((prev) =>
       prev.some((s) => s.toLowerCase() === savedStatus.toLowerCase()) ? prev : [...prev, savedStatus],
+    );
+  }
+
+  async function updateInterviewDate(id: string, interviewDate: string) {
+    const res = await fetch(`/api/candidates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interviewDate }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error ?? "Failed to update interview date");
+      return;
+    }
+
+    setCandidates((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, interviewDate: data.candidate.interviewDate, updatedAt: data.candidate.updatedAt }
+          : c,
+      ),
     );
   }
 
@@ -324,6 +378,9 @@ export function CandidatesClient() {
             <span className="rounded-full bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-200 px-2.5 py-1 font-medium">
               Interview to be scheduled: {counts.interviewToBeScheduled}
             </span>
+            <span className="rounded-full bg-indigo-100 text-indigo-900 dark:bg-indigo-900/40 dark:text-indigo-200 px-2.5 py-1 font-medium">
+              Interview scheduled today: {counts.interviewScheduledToday}
+            </span>
           </div>
         </div>
 
@@ -431,7 +488,7 @@ export function CandidatesClient() {
 
       {loading ? (
         <p className="text-sm opacity-70">Loading…</p>
-      ) : filtered.length === 0 ? (
+      ) : displayCandidates.length === 0 ? (
         <p className="text-sm opacity-70">No candidates yet. Upload a resume to get started.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -470,7 +527,7 @@ export function CandidatesClient() {
         </div>
       )}
 
-      {!loading && filtered.length > CARDS_PER_PAGE && (
+      {!loading && displayCandidates.length > CARDS_PER_PAGE && (
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -499,6 +556,7 @@ export function CandidatesClient() {
           statuses={statuses}
           onClose={() => setSelectedId(null)}
           onUpdateStatus={updateStatus}
+          onUpdateInterviewDate={updateInterviewDate}
           onUpdateCategory={updateCategory}
           onUpdateTextField={updateTextField}
           onUpdateWorkLinks={updateWorkLinks}
