@@ -16,6 +16,12 @@ import {
 
 const CARDS_PER_PAGE = 18;
 
+function whatsappUrl(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const withCountryCode = digits.length === 10 ? `91${digits}` : digits;
+  return `https://wa.me/${withCountryCode}`;
+}
+
 export function CandidatesClient() {
   const searchParams = useSearchParams();
   const statusParam = searchParams.get("status");
@@ -507,7 +513,19 @@ export function CandidatesClient() {
               </div>
 
               <p className="text-sm truncate">{c.email ?? "—"}</p>
-              <p className="text-sm">{c.phone ?? "—"}</p>
+              {c.phone ? (
+                <a
+                  href={whatsappUrl(c.phone)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Message on WhatsApp"
+                  className="text-sm underline decoration-dotted hover:text-green-600 dark:hover:text-green-400 w-fit"
+                >
+                  {c.phone}
+                </a>
+              ) : (
+                <p className="text-sm">—</p>
+              )}
               <p className="text-sm opacity-70">{c.skillCategory ?? "Uncategorized"}</p>
               {c.uploadedBy && (
                 <p className="text-xs opacity-50">Uploaded by {c.uploadedBy.name}</p>
