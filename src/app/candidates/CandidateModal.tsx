@@ -76,11 +76,11 @@ export function CandidateModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-[1600px] flex-col rounded-lg bg-white dark:bg-zinc-900 shadow-xl md:flex-row"
+        className="flex w-full max-w-[1600px] flex-col overflow-y-auto md:overflow-hidden rounded-lg bg-white dark:bg-zinc-900 shadow-xl md:flex-row"
         style={{ height: "94vh", width: "95vw" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col border-b md:border-b-0 md:border-r border-black/10 dark:border-white/15 md:w-[62%]">
+        <div className="flex flex-col shrink-0 border-b md:border-b-0 md:border-r border-black/10 dark:border-white/15 md:w-[62%]">
           <div className="flex items-center justify-between border-b border-black/10 dark:border-white/15 px-4 py-3">
             <span className="truncate font-medium text-sm">{c.fileName}</span>
             <div className="flex items-center gap-2">
@@ -100,13 +100,12 @@ export function CandidateModal({
               </a>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden min-h-[500px]">
+          <div className="h-[45vh] md:h-auto md:flex-1 md:min-h-[500px] overflow-hidden">
             {isPdf ? (
               <iframe
                 ref={iframeRef}
                 src={previewUrl}
                 className="h-full w-full"
-                style={{ minHeight: "500px" }}
                 title={c.fileName}
               />
             ) : (
@@ -123,7 +122,7 @@ export function CandidateModal({
           </div>
         </div>
 
-        <div className="flex flex-col md:w-[38%] overflow-hidden">
+        <div className="flex flex-col md:w-[38%] md:overflow-hidden">
           <div className="flex items-center justify-between border-b border-black/10 dark:border-white/15 px-4 py-3">
             <h2 className="text-lg font-semibold truncate">{c.name ?? "Candidate"}</h2>
             <button
@@ -134,7 +133,7 @@ export function CandidateModal({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <div className="md:flex-1 md:overflow-y-auto p-4 flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Field label="Name">
                 <EditableTextCell

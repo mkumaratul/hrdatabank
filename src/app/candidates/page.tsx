@@ -1,43 +1,21 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { auth, signOut } from "@/lib/auth";
 import { CandidatesClient } from "./CandidatesClient";
+import { HeaderNav } from "./HeaderNav";
 
 export default async function CandidatesPage() {
   const session = await auth();
+
+  async function handleSignOut() {
+    "use server";
+    await signOut({ redirectTo: "/login" });
+  }
 
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-black/10 dark:border-white/15 px-6 py-4">
         <span className="font-semibold">HR Databank</span>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/candidates" className="underline">
-            All Candidates
-          </Link>
-          <Link href="/candidates?status=INTERVIEW_TO_BE_SCHEDULED" className="underline">
-            Interview to be Scheduled
-          </Link>
-          <Link href="/candidates?status=INTERVIEW_SCHEDULED" className="underline">
-            Interview Scheduled
-          </Link>
-          <Link href="/job-descriptions" className="underline">
-            Job Descriptions
-          </Link>
-          <Link href="/hr-users" className="underline">
-            Manage HR
-          </Link>
-          <span className="opacity-70">{session?.user?.name}</span>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
-            <button type="submit" className="underline">
-              Sign out
-            </button>
-          </form>
-        </div>
+        <HeaderNav userName={session?.user?.name} onSignOut={handleSignOut} />
       </header>
 
       <Suspense>
